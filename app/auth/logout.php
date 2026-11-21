@@ -1,7 +1,23 @@
 
 <?php
 
-session_start();
+require_once __DIR__ . '/../../config/session.php';
+startAppSession();
+
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    header("Allow: POST");
+    http_response_code(405);
+    exit("Method not allowed.");
+}
+
+$csrfToken = $_POST["csrf_token"] ?? "";
+if (
+    !is_string($csrfToken) ||
+    !hash_equals($_SESSION["csrf_token"], $csrfToken)
+) {
+    http_response_code(400);
+    exit("Invalid request. Please refresh the page and try again.");
+}
 
 // Clear all session data
 $_SESSION = [];

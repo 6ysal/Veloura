@@ -3,6 +3,39 @@
 use PHPMailer\PHPMailer\Exception as MailerException;
 use PHPMailer\PHPMailer\PHPMailer;
 
+function getAppMailSetting(string $key): string|false
+{
+    static $localSettings = null;
+
+    if ($localSettings === null) {
+        $localSettings = [];
+        $localPath = __DIR__ . '/mailer.local.php';
+        if (is_file($localPath)) {
+            $loadedSettings = require $localPath;
+            if (is_array($loadedSettings)) {
+                $localSettings = $loadedSettings;
+            }
+        }
+    }
+
+    if (array_key_exists($key, $localSettings)) {
+        $value = $localSettings[$key];
+        return is_string($value) || is_int($value) ? (string) $value : false;
+    }
+
+    return getenv($key);
+}
+
+function isAppMailSettingConfigured(string $key): bool
+{
+    $value = getAppMailSetting($key);
+    if ($value === false || trim($value) === "") {
+        return false;
+    }
+
+    return preg_match('/\A(?:your-|change[-_ ]?me|replace[-_ ]?me|example\.com)/i', trim($value)) !== 1;
+}
+
 function isAppMailConfigured(): bool
 {
     if (!is_file(__DIR__ . '/../vendor/autoload.php')) {
@@ -18,8 +51,7 @@ function isAppMailConfigured(): bool
         "MAIL_FROM_ADDRESS",
         "MAIL_FROM_NAME"
     ] as $key) {
-        $value = getenv($key);
-        if ($value === false || trim((string) $value) === "") {
+        if (!isAppMailSettingConfigured($key)) {
             return false;
         }
     }
@@ -29,7 +61,7 @@ function isAppMailConfigured(): bool
 
 function getAppBaseUrl(): string
 {
-    $baseUrl = rtrim((string) getenv("APP_BASE_URL"), "/");
+    $baseUrl = rtrim((string) getAppMailSetting("APP_BASE_URL"), "/");
 
     if (
         $baseUrl === "" ||
@@ -57,13 +89,13 @@ function sendAppEmail(
     require_once $autoloadPath;
 
     $settings = [
-        "SMTP_HOST" => getenv("SMTP_HOST"),
-        "SMTP_PORT" => getenv("SMTP_PORT"),
-        "SMTP_USERNAME" => getenv("SMTP_USERNAME"),
-        "SMTP_PASSWORD" => getenv("SMTP_PASSWORD"),
-        "SMTP_ENCRYPTION" => getenv("SMTP_ENCRYPTION"),
-        "MAIL_FROM_ADDRESS" => getenv("MAIL_FROM_ADDRESS"),
-        "MAIL_FROM_NAME" => getenv("MAIL_FROM_NAME")
+        "SMTP_HOST" => getAppMailSetting("SMTP_HOST"),
+        "SMTP_PORT" => getAppMailSetting("SMTP_PORT"),
+        "SMTP_USERNAME" => getAppMailSetting("SMTP_USERNAME"),
+        "SMTP_PASSWORD" => getAppMailSetting("SMTP_PASSWORD"),
+        "SMTP_ENCRYPTION" => getAppMailSetting("SMTP_ENCRYPTION"),
+        "MAIL_FROM_ADDRESS" => getAppMailSetting("MAIL_FROM_ADDRESS"),
+        "MAIL_FROM_NAME" => getAppMailSetting("MAIL_FROM_NAME")
     ];
 
     foreach ($settings as $key => $value) {

@@ -1,6 +1,7 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../config/session.php';
+startAppSession();
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/admin/helpers.php';
@@ -78,6 +79,9 @@ $titles = [
 ];
 $title = $titles[$section][0];
 $subtitle = $titles[$section][1];
+$searchPlaceholder = $section === "overview"
+    ? "Search products, customers, orders"
+    : "Search " . strtolower($title);
 $navigation = [
     "overview" => "Overview",
     "products" => "Products",
@@ -156,8 +160,8 @@ function adminPagination(array $list, string $section, string $search, array $fi
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
     <title><?= adminEscape($title) ?> | VELOURA Admin</title>
-    <link rel="stylesheet" href="assets/css/admin.css">
-    <script src="assets/js/admin.js" defer></script>
+    <link rel="stylesheet" href="assets/css/admin.css?v=2">
+    <script src="assets/js/admin.js?v=2" defer></script>
 </head>
 <body class="admin-body">
 <div class="admin-shell">
@@ -184,7 +188,6 @@ function adminPagination(array $list, string $section, string $search, array $fi
 
         <div class="sidebar-footer">
             <a class="sidebar-link" href="index.php"><span class="sidebar-mark" aria-hidden="true"></span>Back to Store</a>
-            <a class="sidebar-link" href="../app/auth/logout.php"><span class="sidebar-mark" aria-hidden="true"></span>Logout</a>
             <div class="sidebar-admin">
                 <span class="admin-avatar"><?= adminEscape(strtoupper(substr($admin["full_name"], 0, 1))) ?></span>
                 <span><strong><?= adminEscape($admin["full_name"]) ?></strong><small>Administrator</small></span>
@@ -208,8 +211,8 @@ function adminPagination(array $list, string $section, string $search, array $fi
             <div class="topbar-tools">
                 <form class="global-search" method="GET" action="admin.php" role="search">
                     <input type="hidden" name="section" value="<?= adminEscape($section) ?>">
-                    <label class="sr-only" for="adminSearch">Search this section</label>
-                    <input id="adminSearch" type="search" name="q" value="<?= adminEscape($search) ?>" placeholder="Search <?= adminEscape(strtolower($title)) ?>">
+                    <label class="sr-only" for="adminSearch"><?= $section === "overview" ? "Search products, customers, and orders" : "Search this section" ?></label>
+                    <input id="adminSearch" type="search" name="q" value="<?= adminEscape($search) ?>" placeholder="<?= adminEscape($searchPlaceholder) ?>">
                     <button type="submit" aria-label="Search">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.5"></circle><path d="m16 16 5 5"></path></svg>
                     </button>
@@ -218,10 +221,25 @@ function adminPagination(array $list, string $section, string $search, array $fi
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>
                     <?php if ($notificationCount > 0): ?><span><?= $notificationCount > 99 ? "99+" : $notificationCount ?></span><?php endif; ?>
                 </a>
-                <div class="topbar-profile">
-                    <span class="admin-avatar"><?= adminEscape(strtoupper(substr($admin["full_name"], 0, 1))) ?></span>
-                    <span><strong><?= adminEscape($admin["full_name"]) ?></strong><small>Administrator</small></span>
-                </div>
+                <details class="topbar-profile profile-menu" data-profile-menu>
+                    <summary class="profile-trigger" aria-label="Open administrator profile menu">
+                        <span class="admin-avatar"><?= adminEscape(strtoupper(substr($admin["full_name"], 0, 1))) ?></span>
+                        <span class="profile-label"><strong><?= adminEscape($admin["full_name"]) ?></strong><small>Administrator</small></span>
+                        <svg class="profile-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"></path></svg>
+                    </summary>
+                    <div class="profile-dropdown">
+                        <div class="profile-dropdown-identity">
+                            <strong><?= adminEscape($admin["full_name"]) ?></strong>
+                            <small><?= adminEscape($admin["email"]) ?></small>
+                        </div>
+                        <a href="admin.php">Admin dashboard</a>
+                        <a href="index.php">Back to Store</a>
+                        <form method="POST" action="../app/auth/logout.php">
+                            <?= adminCsrfField() ?>
+                            <button class="profile-logout" type="submit">Logout</button>
+                        </form>
+                    </div>
+                </details>
                 <time class="topbar-date" datetime="<?= adminEscape(date("Y-m-d")) ?>"><?= adminEscape(date("D, M j")) ?></time>
             </div>
         </header>
@@ -253,6 +271,13 @@ function adminPagination(array $list, string $section, string $search, array $fi
                 <?php $dashboard = $data["dashboard"]; ?>
                 <?php $stats = $dashboard["stats"]; ?>
                 <?php
+                    $revenueComparison = $dashboard["revenue_comparison"];
+                    $revenueChange = $revenueComparison["change_percent"];
+                    $revenueTrend = $revenueChange === null
+                        ? "neutral"
+                        : ($revenueChange > 0 ? "positive" : ($revenueChange < 0 ? "negative" : "neutral"));
+                ?>
+                <?php
                     $maxRevenue = max(1.0, ...array_column($dashboard["months"], "revenue"));
                     $chartPoints = [];
                     foreach ($dashboard["months"] as $index => $month) {
@@ -264,7 +289,23 @@ function adminPagination(array $list, string $section, string $search, array $fi
                 <section class="stat-grid" aria-label="Store statistics">
                     <article class="stat-card">
                         <span class="stat-icon stat-icon-rose">EGP</span>
-                        <div><p>Total revenue</p><strong><?= number_format($stats["revenue"], 2) ?> <small>EGP</small></strong><span class="stat-note">Paid, non-cancelled orders</span></div>
+                        <div>
+                            <p>Total revenue</p>
+                            <strong><?= number_format($stats["revenue"], 2) ?> <small>EGP</small></strong>
+                            <span class="stat-note">Paid, non-cancelled orders · all time</span>
+                            <span class="revenue-comparison is-<?= $revenueTrend ?>">
+                                <strong><?= number_format($revenueComparison["current_month_revenue"], 2) ?> EGP</strong>
+                                this month
+                                <?php if ($revenueChange === null): ?>
+                                    <small>No revenue in <?= adminEscape($revenueComparison["previous_month_label"]) ?> to compare</small>
+                                <?php else: ?>
+                                    <small>
+                                        <?= $revenueChange > 0 ? "+" : ($revenueChange < 0 ? "−" : "") ?><?= number_format(abs($revenueChange), 1) ?>%
+                                        vs. <?= adminEscape($revenueComparison["previous_month_label"]) ?>
+                                    </small>
+                                <?php endif; ?>
+                            </span>
+                        </div>
                     </article>
                     <article class="stat-card">
                         <span class="stat-icon stat-icon-sand">01</span>
@@ -287,6 +328,79 @@ function adminPagination(array $list, string $section, string $search, array $fi
                         <div><p>Low stock</p><strong><?= number_format($stats["low_stock"]) ?></strong><span class="stat-note">At or below <?= (int) $settings["low_stock_threshold"] ?> units</span></div>
                     </article>
                 </section>
+
+                <?php if ($search !== ""): ?>
+                    <?php
+                        $searchResults = $dashboard["search_results"];
+                        $hasSearchResults = $searchResults["products"] !== []
+                            || $searchResults["customers"] !== []
+                            || $searchResults["orders"] !== [];
+                    ?>
+                    <section class="panel dashboard-search-panel" aria-live="polite">
+                        <div class="panel-heading">
+                            <div><p class="panel-eyebrow">DASHBOARD SEARCH</p><h3>Results for “<?= adminEscape($search) ?>”</h3></div>
+                            <a class="text-link" href="admin.php">Clear search</a>
+                        </div>
+                        <?php if (!$hasSearchResults): ?>
+                            <div class="empty-state"><strong>No matching records</strong><span>Try another product, customer, or order ID.</span></div>
+                        <?php else: ?>
+                            <div class="dashboard-search-grid">
+                                <section class="dashboard-search-group">
+                                    <h4>Products</h4>
+                                    <?php if ($searchResults["products"]): ?>
+                                        <ul class="dashboard-search-list">
+                                            <?php foreach ($searchResults["products"] as $product): ?>
+                                                <li>
+                                                    <a href="admin.php?section=products&edit=<?= (int) $product["id"] ?>">
+                                                        <strong><?= adminEscape($product["name"]) ?></strong>
+                                                        <small><?= number_format((float) $product["price"], 2) ?> EGP · <?= (int) $product["stock"] ?> in stock</small>
+                                                    </a>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    <?php else: ?>
+                                        <p class="search-empty">No matching products.</p>
+                                    <?php endif; ?>
+                                </section>
+                                <section class="dashboard-search-group">
+                                    <h4>Customers</h4>
+                                    <?php if ($searchResults["customers"]): ?>
+                                        <ul class="dashboard-search-list">
+                                            <?php foreach ($searchResults["customers"] as $customer): ?>
+                                                <li>
+                                                    <a href="admin.php?section=customers&view=<?= (int) $customer["id"] ?>">
+                                                        <strong><?= adminEscape($customer["full_name"]) ?></strong>
+                                                        <small><?= adminEscape($customer["email"]) ?></small>
+                                                    </a>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    <?php else: ?>
+                                        <p class="search-empty">No matching customers.</p>
+                                    <?php endif; ?>
+                                </section>
+                                <section class="dashboard-search-group">
+                                    <h4>Orders</h4>
+                                    <?php if ($searchResults["orders"]): ?>
+                                        <ul class="dashboard-search-list">
+                                            <?php foreach ($searchResults["orders"] as $order): ?>
+                                                <li>
+                                                    <a href="admin.php?section=orders&view=<?= (int) $order["id"] ?>">
+                                                        <strong>Order #<?= (int) $order["id"] ?> · <?= adminEscape($order["customer_name"]) ?></strong>
+                                                        <small><?= number_format((float) $order["final_amount"], 2) ?> EGP · <?= adminEscape(adminFormatDate($order["created_at"])) ?></small>
+                                                    </a>
+                                                    <?= adminStatusBadge($order["order_status"]) ?>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    <?php else: ?>
+                                        <p class="search-empty">No matching orders.</p>
+                                    <?php endif; ?>
+                                </section>
+                            </div>
+                        <?php endif; ?>
+                    </section>
+                <?php endif; ?>
 
                 <div class="dashboard-grid">
                     <section class="panel revenue-panel">
@@ -316,7 +430,8 @@ function adminPagination(array $list, string $section, string $search, array $fi
                         <?php if ($dashboard["low_stock_products"]): ?>
                             <ul class="compact-list">
                                 <?php foreach ($dashboard["low_stock_products"] as $product): ?>
-                                    <li><span class="compact-avatar"><?= adminEscape(strtoupper(substr($product["name"], 0, 1))) ?></span><span class="compact-main"><strong><?= adminEscape($product["name"]) ?></strong><small>Product #<?= (int) $product["id"] ?></small></span><span class="stock-count"><?= (int) $product["stock"] ?> left</span></li>
+                                    <?php $productStock = (int) $product["stock"]; ?>
+                                    <li><span class="compact-avatar"><?= adminEscape(strtoupper(substr($product["name"], 0, 1))) ?></span><span class="compact-main"><strong><?= adminEscape($product["name"]) ?></strong><small>Product #<?= (int) $product["id"] ?></small></span><span class="stock-count <?= $productStock === 0 ? "stock-critical" : "stock-low" ?>" aria-label="<?= $productStock === 0 ? "Out of stock" : "Low stock" ?>"><?= $productStock === 0 ? "Out" : $productStock . " left" ?></span></li>
                                 <?php endforeach; ?>
                             </ul>
                         <?php else: ?>
@@ -331,15 +446,15 @@ function adminPagination(array $list, string $section, string $search, array $fi
                         <?php if ($dashboard["recent_orders"]): ?>
                             <div class="table-wrap">
                                 <table class="data-table">
-                                    <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Total</th><th>Status</th></tr></thead>
+                                    <thead><tr><th>Order ID</th><th>Customer</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
                                     <tbody>
                                     <?php foreach ($dashboard["recent_orders"] as $order): ?>
                                         <tr>
                                             <td><a class="table-link" href="admin.php?section=orders&view=<?= (int) $order["id"] ?>">#<?= (int) $order["id"] ?></a></td>
                                             <td><?= adminEscape($order["customer_name"]) ?></td>
-                                            <td><?= adminEscape(adminFormatDate($order["created_at"])) ?></td>
                                             <td><?= number_format((float) $order["final_amount"], 2) ?> EGP</td>
                                             <td><?= adminStatusBadge($order["order_status"]) ?></td>
+                                            <td><?= adminEscape(adminFormatDate($order["created_at"])) ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                     </tbody>
@@ -351,7 +466,7 @@ function adminPagination(array $list, string $section, string $search, array $fi
                     </section>
 
                     <section class="panel top-products-panel">
-                        <div class="panel-heading"><div><p class="panel-eyebrow">BEST SELLERS</p><h3>Top products</h3></div><a class="text-link" href="admin.php?section=products">Catalog</a></div>
+                        <div class="panel-heading"><div><p class="panel-eyebrow">BEST SELLERS</p><h3>Best-selling products</h3></div><a class="text-link" href="admin.php?section=products">Catalog</a></div>
                         <?php if ($dashboard["top_products"]): ?>
                             <ol class="ranked-list">
                                 <?php foreach ($dashboard["top_products"] as $index => $product): ?>
@@ -482,7 +597,7 @@ function adminPagination(array $list, string $section, string $search, array $fi
                     <?php if ($data["customer"]): $customer = $data["customer"]; ?>
                         <section class="panel customer-detail-panel"><div class="panel-heading"><div><p class="panel-eyebrow">ACCOUNT #<?= (int) $customer["id"] ?></p><h3><?= adminEscape($customer["full_name"]) ?></h3></div><a class="text-link" href="admin.php?section=customers">Back to customers</a></div>
                             <div class="detail-grid"><div class="detail-card"><h4>Contact</h4><p><?= adminEscape($customer["email"]) ?></p><p><?= adminEscape($customer["phone"] ?? "No phone on file") ?></p><p>Email <?= $customer["email_verified_at"] ? "verified" : "not verified" ?></p><p>Joined <?= adminEscape(adminFormatDate($customer["created_at"])) ?></p></div><div class="detail-card"><h4>Account</h4><p><?= adminStatusBadge($customer["status"]) ?> <?= adminStatusBadge($customer["role"]) ?></p><p>Store credit <strong><?= number_format((float) $customer["store_credit"], 2) ?> EGP</strong></p></div></div>
-                            <form class="customer-edit-form" method="POST"><?= adminCsrfField() ?><input type="hidden" name="action" value="update_customer"><input type="hidden" name="customer_id" value="<?= (int) $customer["id"] ?>"><input type="hidden" name="return_section" value="customers"><input type="hidden" name="return_id" value="<?= (int) $customer["id"] ?>"><label>Role<select name="role"><option value="customer" <?= $customer["role"] === "customer" ? "selected" : "" ?>>Customer</option><option value="admin" <?= $customer["role"] === "admin" ? "selected" : "" ?>>Administrator</option></select></label><label>Account status<select name="status"><option value="active" <?= $customer["status"] === "active" ? "selected" : "" ?>>Active</option><option value="blocked" <?= $customer["status"] === "blocked" ? "selected" : "" ?>>Blocked</option></select></label><label>Store credit (EGP)<input name="store_credit" type="number" min="0" step="0.01" value="<?= adminEscape($customer["store_credit"]) ?>" required></label><button class="button button-primary" type="submit">Save account</button></form>
+                            <form class="customer-edit-form" method="POST" data-confirm="Save these changes to the customer's role, access status, or store credit?"><?= adminCsrfField() ?><input type="hidden" name="action" value="update_customer"><input type="hidden" name="customer_id" value="<?= (int) $customer["id"] ?>"><input type="hidden" name="return_section" value="customers"><input type="hidden" name="return_id" value="<?= (int) $customer["id"] ?>"><label>Role<select name="role"><option value="customer" <?= $customer["role"] === "customer" ? "selected" : "" ?>>Customer</option><option value="admin" <?= $customer["role"] === "admin" ? "selected" : "" ?>>Administrator</option></select></label><label>Account status<select name="status"><option value="active" <?= $customer["status"] === "active" ? "selected" : "" ?>>Active</option><option value="blocked" <?= $customer["status"] === "blocked" ? "selected" : "" ?>>Blocked</option></select></label><label>Store credit (EGP)<input name="store_credit" type="number" min="0" step="0.01" value="<?= adminEscape($customer["store_credit"]) ?>" required></label><button class="button button-primary" type="submit">Save account</button></form>
                             <div class="panel-heading subpanel-heading"><div><p class="panel-eyebrow">ACCOUNT HISTORY</p><h3>Recent orders</h3></div></div>
                             <?php if ($data["customer_orders"]): ?><div class="table-wrap"><table class="data-table"><thead><tr><th>Order</th><th>Date</th><th>Total</th><th>Payment</th><th>Status</th></tr></thead><tbody><?php foreach ($data["customer_orders"] as $order): ?><tr><td><a class="table-link" href="admin.php?section=orders&view=<?= (int) $order["id"] ?>">#<?= (int) $order["id"] ?></a></td><td><?= adminEscape(adminFormatDate($order["created_at"])) ?></td><td><?= number_format((float) $order["final_amount"], 2) ?> EGP</td><td><?= adminStatusBadge($order["payment_status"]) ?></td><td><?= adminStatusBadge($order["order_status"]) ?></td></tr><?php endforeach; ?></tbody></table></div><?php else: ?><div class="empty-state"><strong>No orders yet</strong><span>Customer orders will appear here.</span></div><?php endif; ?>
                         </section>
@@ -536,8 +651,8 @@ function adminPagination(array $list, string $section, string $search, array $fi
                     </form>
                 </section>
                 <section class="panel settings-panel"><div class="panel-heading"><div><p class="panel-eyebrow">SYSTEM STATUS</p><h3>Operational configuration</h3></div></div>
-                    <div class="system-status-grid"><article><span>Database</span><strong><?= adminEscape($pdo->query("SELECT DATABASE()")->fetchColumn()) ?></strong><small>PDO connection is active.</small></article><article><span>Email delivery</span><strong class="<?= $data["mail_configured"] ? "text-success" : "text-warning" ?>"><?= $data["mail_configured"] ? "Configured" : "Needs setup" ?></strong><small><?php if ($data["mail_configured"]): ?>SMTP values are present; secrets are never displayed.<?php else: ?>Set environment variables: <?= adminEscape(implode(", ", $data["missing_mail_settings"])) ?>.<?php endif; ?></small></article><article><span>Server time</span><strong><?= adminEscape(date("T")) ?></strong><small><?= adminEscape(date("Y-m-d H:i:s")) ?></small></article></div>
-                    <p class="settings-intro">Email credentials are managed in the server environment, not stored in the dashboard. See <a class="text-link" href="../docs/setup.md">setup instructions</a>.</p>
+                    <div class="system-status-grid"><article><span>Database</span><strong><?= adminEscape($pdo->query("SELECT DATABASE()")->fetchColumn()) ?></strong><small>PDO connection is active.</small></article><article><span>Email delivery</span><strong class="<?= $data["mail_configured"] ? "text-success" : "text-warning" ?>"><?= $data["mail_configured"] ? "Configured" : "Needs setup" ?></strong><small><?php if ($data["mail_configured"]): ?>SMTP values are present; secrets are never displayed.<?php else: ?>Configure environment variables or config/mailer.local.php: <?= adminEscape(implode(", ", $data["missing_mail_settings"])) ?>.<?php endif; ?></small></article><article><span>Server time</span><strong><?= adminEscape(date("T")) ?></strong><small><?= adminEscape(date("Y-m-d H:i:s")) ?></small></article></div>
+                    <p class="settings-intro">Email credentials are managed in the server environment or the ignored local configuration file, never in the dashboard. See <a class="text-link" href="../docs/setup.md">setup instructions</a>.</p>
                 </section>
             <?php endif; ?>
         </main>

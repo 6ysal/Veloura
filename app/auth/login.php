@@ -1,7 +1,8 @@
 
 <?php
 
-session_start();
+require_once __DIR__ . '/../../config/session.php';
+startAppSession();
 
 require_once __DIR__ . '/../../config/database.php';
 
@@ -12,13 +13,19 @@ if (isset($_SESSION["user_id"])) {
 
 $message = "";
 $needsVerification = false;
+if (empty($_SESSION["csrf_token"])) {
+    $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
+}
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $emailInput = $_POST["email"] ?? "";
     $password = $_POST["password"] ?? "";
+    $csrfToken = $_POST["csrf_token"] ?? "";
     $email = is_string($emailInput) ? trim($emailInput) : "";
 
-    if ($email === "" || !is_string($password) || $password === "") {
+    if (!is_string($csrfToken) || !hash_equals($_SESSION["csrf_token"], $csrfToken)) {
+        $message = "Your session expired. Please refresh the page and try again.";
+    } elseif ($email === "" || !is_string($password) || $password === "") {
 
         $message = "Please enter your email and password.";
 
@@ -53,13 +60,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             } else {
 
                 session_regenerate_id(true);
+                $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
 
                 $_SESSION["user_id"] = $user["id"];
                 $_SESSION["user_name"] = $user["full_name"];
                 $_SESSION["user_email"] = $user["email"];
                 $_SESSION["user_role"] = $user["role"];
 
-                header("Location: ../../public/index.php");
+                $destination = $user["role"] === "admin"
+                    ? "../../public/admin.php"
+                    : "../../public/index.php";
+                header("Location: " . $destination);
                 exit;
             }
 
@@ -80,10 +91,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login | VELOURA</title>
 
+    <link rel="stylesheet" href="../../public/assets/css/style.css?v=2">
     <link rel="stylesheet" href="../../public/assets/css/auth.css">
 </head>
 
 <body>
+
+    <?php
+    $headerPublicPrefix = "../../public/";
+    $headerAuthPrefix = "./";
+    require __DIR__ . '/../../public/partials/store-header.php';
+    ?>
 
     <main class="auth-container">
 
@@ -125,6 +143,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 <?php endif; ?>
 
                 <form method="POST" action="" class="auth-form">
+
+                    <input
+                        type="hidden"
+                        name="csrf_token"
+                        value="<?php echo htmlspecialchars($_SESSION["csrf_token"], ENT_QUOTES, 'UTF-8'); ?>"
+                    >
 
                     <div class="form-group">
                         <label for="email">Email Address</label>

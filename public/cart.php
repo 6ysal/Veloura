@@ -1,6 +1,7 @@
 
 <?php
-session_start();
+require_once __DIR__ . '/../config/session.php';
+startAppSession();
 
 require_once __DIR__ . '/../config/database.php';
 
@@ -8,13 +9,7 @@ if (empty($_SESSION["csrf_token"])) {
     $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
 }
 
-// Cart requires login
-if (!isset($_SESSION["user_id"])) {
-    header("Location: ../app/auth/login.php");
-    exit;
-}
-
-$userId = (int) $_SESSION["user_id"];
+$userId = requireActiveAccount($pdo, "../app/auth/login.php");
 $message = "";
 
 if (
@@ -225,7 +220,7 @@ foreach ($items as $item) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shopping Cart | VELOURA</title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=2">
 
     <style>
         .cart-page {
@@ -313,14 +308,7 @@ foreach ($items as $item) {
 
 <body>
 
-<header class="header">
-    <a href="index.php" class="logo">VELOURA<span>.</span></a>
-    <nav class="navbar">
-        <a href="index.php">Home</a>
-        <a href="products.php">Shop</a>
-    </nav>
-    <?php require __DIR__ . '/partials/header-actions.php'; ?>
-</header>
+<?php require __DIR__ . '/partials/store-header.php'; ?>
 
 <main class="cart-page">
 

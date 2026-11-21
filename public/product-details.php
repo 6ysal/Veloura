@@ -1,6 +1,7 @@
 
 <?php
-session_start();
+require_once __DIR__ . '/../config/session.php';
+startAppSession();
 
 require_once __DIR__ . '/../config/database.php';
 
@@ -46,7 +47,7 @@ $availableStock = $notFound ? 0 : (int)$product["stock"];
         <?= $notFound ? 'Product Not Found' : htmlspecialchars($product['name']) . ' | VELOURA' ?>
     </title>
 
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=2">
 
     <style>
         .details-page {
@@ -221,18 +222,7 @@ $availableStock = $notFound ? 0 : (int)$product["stock"];
 
 <body>
 
-<header class="header">
-    <div class="logo">VELO<span>URA</span></div>
-
-    <nav class="navbar">
-        <a href="index.php">Home</a>
-        <a href="products.php">Shop</a>
-        <a href="index.php#about">About</a>
-        <a href="index.php#contact">Contact</a>
-    </nav>
-
-    <?php require __DIR__ . '/partials/header-actions.php'; ?>
-</header>
+<?php require __DIR__ . '/partials/store-header.php'; ?>
 
 <main class="details-page">
 

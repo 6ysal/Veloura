@@ -1,17 +1,12 @@
 
 <?php
-session_start();
+require_once __DIR__ . '/../config/session.php';
+startAppSession();
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/coupons.php';
 
-// Login required
-if (!isset($_SESSION["user_id"])) {
-    header("Location: ../app/auth/login.php");
-    exit;
-}
-
-$userId = (int) $_SESSION["user_id"];
+$userId = requireActiveAccount($pdo, "../app/auth/login.php");
 
 $storeSettings = [
     "shipping_fee" => "50",
@@ -116,17 +111,22 @@ if (
 
         $couponInput = $_POST["coupon_code"] ?? "";
         $couponCode = is_string($couponInput) ? strtoupper(trim($couponInput)) : "";
-        $shippingName = trim($_POST["shipping_name"] ?? "");
-        $shippingPhone = trim($_POST["shipping_phone"] ?? "");
-        $shippingAddress = trim($_POST["shipping_address"] ?? "");
-        $paymentMethod = $_POST["payment_method"] ?? "";
+        $shippingNameInput = $_POST["shipping_name"] ?? "";
+        $shippingPhoneInput = $_POST["shipping_phone"] ?? "";
+        $shippingAddressInput = $_POST["shipping_address"] ?? "";
+        $paymentMethodInput = $_POST["payment_method"] ?? "";
+        $shippingName = is_string($shippingNameInput) ? trim($shippingNameInput) : "";
+        $shippingPhone = is_string($shippingPhoneInput) ? trim($shippingPhoneInput) : "";
+        $shippingAddress = is_string($shippingAddressInput) ? trim($shippingAddressInput) : "";
+        $paymentMethod = is_string($paymentMethodInput) ? $paymentMethodInput : "";
 
         if (
-            $shippingName === "" ||
+            preg_match('/\A.{1,150}\z/us', $shippingName) !== 1 ||
             $shippingPhone === "" ||
-            $shippingAddress === ""
+            $shippingAddress === "" ||
+            strlen($shippingAddress) > 2000
         ) {
-            $error = "Please complete all shipping information.";
+            $error = "Please enter valid shipping information.";
         } elseif (
             !preg_match('/^[0-9+\-\s]{7,20}$/', $shippingPhone)
         ) {
@@ -589,7 +589,7 @@ $credit = (float) $stmt->fetchColumn();
 
     <title>Checkout | VELOURA</title>
 
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=2">
 
     <style>
         .checkout-page {
@@ -762,16 +762,7 @@ $credit = (float) $stmt->fetchColumn();
 
 <body>
 
-<header class="header">
-    <a href="index.php" class="logo">VELOURA<span>.</span></a>
-
-    <nav class="navbar">
-        <a href="index.php">Home</a>
-        <a href="products.php">Shop</a>
-    </nav>
-
-    <?php require __DIR__ . '/partials/header-actions.php'; ?>
-</header>
+<?php require __DIR__ . '/partials/store-header.php'; ?>
 
 <?php if ($success): ?>
 
@@ -865,7 +856,9 @@ $credit = (float) $stmt->fetchColumn();
                                     name="shipping_name"
                                     maxlength="150"
                                     value="<?= htmlspecialchars(
-                                        $_POST["shipping_name"] ?? ($_SESSION["user_name"] ?? ""),
+                                        is_string($_POST["shipping_name"] ?? null)
+                                            ? $_POST["shipping_name"]
+                                            : (string) ($_SESSION["user_name"] ?? ""),
                                         ENT_QUOTES,
                                         'UTF-8'
                                     ) ?>"
@@ -884,7 +877,7 @@ $credit = (float) $stmt->fetchColumn();
                                     name="shipping_phone"
                                     maxlength="20"
                                     value="<?= htmlspecialchars(
-                                        $_POST["shipping_phone"] ?? "",
+                                        is_string($_POST["shipping_phone"] ?? null) ? $_POST["shipping_phone"] : "",
                                         ENT_QUOTES,
                                         'UTF-8'
                                     ) ?>"
@@ -900,9 +893,10 @@ $credit = (float) $stmt->fetchColumn();
                                 <textarea
                                     id="shipping_address"
                                     name="shipping_address"
+                                    maxlength="2000"
                                     required
                                 ><?= htmlspecialchars(
-                                    $_POST["shipping_address"] ?? "",
+                                    is_string($_POST["shipping_address"] ?? null) ? $_POST["shipping_address"] : "",
                                     ENT_QUOTES,
                                     'UTF-8'
                                 ) ?></textarea>

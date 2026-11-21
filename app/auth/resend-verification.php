@@ -1,6 +1,7 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../../config/session.php';
+startAppSession();
 
 require_once __DIR__ . '/../../config/database.php';
 
@@ -80,9 +81,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resend Verification | VELOURA</title>
+    <link rel="stylesheet" href="../../public/assets/css/style.css?v=2">
     <link rel="stylesheet" href="../../public/assets/css/auth.css">
 </head>
 <body>
+    <?php
+    $headerPublicPrefix = "../../public/";
+    $headerAuthPrefix = "./";
+    require __DIR__ . '/../../public/partials/store-header.php';
+    ?>
     <main class="auth-content">
         <section class="auth-form-wrapper">
             <a href="../../public/index.php" class="auth-logo">VELO<span>URA</span></a>

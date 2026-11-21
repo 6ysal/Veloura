@@ -44,9 +44,15 @@ credentials:
 - `MAIL_FROM_ADDRESS`
 - `MAIL_FROM_NAME`
 
-Restart Apache after changing its environment. SMTP settings are required to send
-verification links and newsletter coupons. If newsletter email is unavailable,
-the welcome coupon is displayed on the homepage confirmation instead.
+Alternatively, copy `config/mailer.example.php` to `config/mailer.local.php`
+and replace the placeholder values. The local file is ignored by Git and takes
+precedence over environment variables, so it does not need to be exported in
+PowerShell or Apache. Do not commit `mailer.local.php`.
+
+Restart Apache after changing an Apache environment variable or PHP setting.
+SMTP settings are required to send verification links and newsletter coupons.
+If newsletter email is unavailable, the welcome coupon is displayed on the
+homepage confirmation instead.
 
 ## Coupons and offers
 
@@ -106,6 +112,26 @@ Suggested admin checks after setup:
    free-shipping threshold.
 
 ## Run
+
+### XAMPP
+
+1. Make sure Apache serves the project at `C:\xampp\htdocs\Veloura`. If it
+   already exists there through a symlink or alias, leave it in place; otherwise
+   copy the project there or configure an Apache alias.
+2. Start **Apache** and **MySQL** from the XAMPP Control Panel.
+3. Ensure `config/database.php` matches your local MySQL credentials. The default
+   XAMPP credentials are `root` with an empty password.
+4. Import `database/schema.sql` with phpMyAdmin only for a new database. For an
+   existing database, apply only the migrations listed above; do not re-import
+   the schema.
+5. If using SMTP, set `APP_BASE_URL` in `config/mailer.local.php` to
+   `http://localhost/Veloura`, then configure the SMTP values in that file.
+6. Open `http://localhost/Veloura/public/index.php`.
+
+If the project stays outside `htdocs`, configure an Apache virtual host or alias
+that points to the project folder and use that host in `APP_BASE_URL`.
+
+### PHP built-in server
 
 From the project root, start PHP's built-in server:
 

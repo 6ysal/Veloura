@@ -1,18 +1,15 @@
 <?php
-session_start();
+require_once __DIR__ . '/../config/session.php';
+startAppSession();
 
 require_once __DIR__ . '/../config/database.php';
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: ../app/auth/login.php");
-    exit;
-}
+$userId = requireActiveAccount($pdo, "../app/auth/login.php");
 
 if (empty($_SESSION["csrf_token"])) {
     $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
 }
 
-$userId = (int) $_SESSION["user_id"];
 $profileStmt = $pdo->prepare("
     SELECT full_name, email, phone, store_credit
     FROM users
@@ -32,66 +29,40 @@ $error = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $name = $_POST["full_name"] ?? "";
-    $email = $_POST["email"] ?? "";
     $phone = $_POST["phone"] ?? "";
     $csrfToken = $_POST["csrf_token"] ?? "";
 
     $name = is_string($name) ? trim($name) : "";
-    $email = is_string($email) ? trim($email) : "";
     $phone = is_string($phone) ? trim($phone) : "";
 
     if (!is_string($csrfToken) || !hash_equals($_SESSION["csrf_token"], $csrfToken)) {
         $error = "Your session expired. Please refresh the page and try again.";
     } elseif (
         preg_match('/\A.{1,150}\z/us', $name) !== 1 ||
-        strlen($email) > 254 ||
-        !filter_var($email, FILTER_VALIDATE_EMAIL) ||
         !preg_match('/\A[0-9+\-\s()]{7,20}\z/D', $phone)
     ) {
-        $error = "Enter a valid name, email address, and phone number.";
+        $error = "Enter a valid name and phone number.";
     } else {
         $profile["full_name"] = $name;
-        $profile["email"] = $email;
         $profile["phone"] = $phone;
 
         try {
-            $emailStmt = $pdo->prepare("
-                SELECT id
-                FROM users
-                WHERE email = :email AND id <> :user_id
-                LIMIT 1
+            $updateStmt = $pdo->prepare("
+                UPDATE users
+                SET full_name = :full_name, phone = :phone
+                WHERE id = :user_id
             ");
-            $emailStmt->execute([
-                "email" => $email,
+            $updateStmt->execute([
+                "full_name" => $name,
+                "phone" => $phone,
                 "user_id" => $userId
             ]);
 
-            if ($emailStmt->fetch()) {
-                $error = "That email address is already associated with another account.";
-            } else {
-                $updateStmt = $pdo->prepare("
-                    UPDATE users
-                    SET full_name = :full_name, email = :email, phone = :phone
-                    WHERE id = :user_id
-                ");
-                $updateStmt->execute([
-                    "full_name" => $name,
-                    "email" => $email,
-                    "phone" => $phone,
-                    "user_id" => $userId
-                ]);
-
-                $_SESSION["user_name"] = $name;
-                $_SESSION["user_email"] = $email;
-                $message = "Your profile has been updated.";
-            }
+            $_SESSION["user_name"] = $name;
+            $message = "Your profile has been updated.";
         } catch (PDOException $e) {
-            if ($e->getCode() === "23000") {
-                $error = "That email address is already associated with another account.";
-            } else {
-                error_log("Profile update failed: " . $e->getMessage());
-                $error = "We couldn't update your profile right now. Please try again later.";
-            }
+            error_log("Profile update failed: " . $e->getMessage());
+            $error = "We couldn't update your profile right now. Please try again later.";
         }
     }
 }
@@ -150,19 +121,11 @@ $orderStatusSteps = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Profile | VELOURA</title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=2">
 </head>
 <body>
 
-<header class="header">
-    <a href="index.php" class="logo">VELOURA<span>.</span></a>
-    <nav class="navbar">
-        <a href="index.php">Home</a>
-        <a href="products.php">Shop</a>
-        <a href="index.php#contact">Contact</a>
-    </nav>
-    <?php require __DIR__ . '/partials/header-actions.php'; ?>
-</header>
+<?php require __DIR__ . '/partials/store-header.php'; ?>
 
 <main class="profile-page">
     <div class="profile-container">
@@ -235,8 +198,9 @@ $orderStatusSteps = [
                             autocomplete="email"
                             maxlength="254"
                             value="<?= htmlspecialchars($profile["email"], ENT_QUOTES, 'UTF-8') ?>"
-                            required
+                            readonly
                         >
+                        <small>Email addresses cannot be changed from this page.</small>
                     </div>
 
                     <div class="profile-form-group">

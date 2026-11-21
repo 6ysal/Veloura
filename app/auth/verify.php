@@ -58,9 +58,15 @@ if (is_string($token) && preg_match('/\A[a-f0-9]{64}\z/i', $token) === 1) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Email Verification | VELOURA</title>
+    <link rel="stylesheet" href="../../public/assets/css/style.css?v=2">
     <link rel="stylesheet" href="../../public/assets/css/auth.css">
 </head>
 <body>
+    <?php
+    $headerPublicPrefix = "../../public/";
+    $headerAuthPrefix = "./";
+    require __DIR__ . '/../../public/partials/store-header.php';
+    ?>
     <main class="auth-content">
         <section class="auth-form-wrapper">
             <a href="../../public/index.php" class="auth-logo">VELO<span>URA</span></a>

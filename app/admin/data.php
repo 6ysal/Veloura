@@ -19,6 +19,62 @@ function adminStoreSettings(PDO $pdo): array
     return $settings;
 }
 
+function adminDashboardSearchData(PDO $pdo, string $search): array
+{
+    $pattern = "%" . addcslashes($search, "\\%_") . "%";
+
+    $productsStmt = $pdo->prepare("
+        SELECT id, name, price, stock, status
+        FROM products
+        WHERE name LIKE :name_search
+           OR description LIKE :description_search
+        ORDER BY name
+        LIMIT 5
+    ");
+    $productsStmt->execute([
+        "name_search" => $pattern,
+        "description_search" => $pattern
+    ]);
+
+    $customersStmt = $pdo->prepare("
+        SELECT id, full_name, email, status
+        FROM users
+        WHERE role = 'customer'
+          AND (full_name LIKE :name_search OR email LIKE :email_search)
+        ORDER BY created_at DESC, id DESC
+        LIMIT 5
+    ");
+    $customersStmt->execute([
+        "name_search" => $pattern,
+        "email_search" => $pattern
+    ]);
+
+    $ordersStmt = $pdo->prepare("
+        SELECT o.id, o.final_amount, o.order_status, o.created_at,
+               o.shipping_name, u.full_name AS customer_name, u.email AS customer_email
+        FROM orders o
+        JOIN users u ON u.id = o.user_id
+        WHERE CAST(o.id AS CHAR) = :order_id
+           OR o.shipping_name LIKE :shipping_search
+           OR u.full_name LIKE :customer_search
+           OR u.email LIKE :email_search
+        ORDER BY o.created_at DESC, o.id DESC
+        LIMIT 5
+    ");
+    $ordersStmt->execute([
+        "order_id" => $search,
+        "shipping_search" => $pattern,
+        "customer_search" => $pattern,
+        "email_search" => $pattern
+    ]);
+
+    return [
+        "products" => $productsStmt->fetchAll(PDO::FETCH_ASSOC),
+        "customers" => $customersStmt->fetchAll(PDO::FETCH_ASSOC),
+        "orders" => $ordersStmt->fetchAll(PDO::FETCH_ASSOC)
+    ];
+}
+
 function adminDashboardData(PDO $pdo, int $lowStockThreshold): array
 {
     $stats = [
@@ -46,8 +102,36 @@ function adminDashboardData(PDO $pdo, int $lowStockThreshold): array
     $lowStockStmt->execute(["threshold" => $lowStockThreshold]);
     $stats["low_stock"] = (int) $lowStockStmt->fetchColumn();
 
-    $startMonth = new DateTimeImmutable("first day of this month", new DateTimeZone("UTC"));
-    $startMonth = $startMonth->modify("-5 months");
+    $utc = new DateTimeZone("UTC");
+    $currentMonthStart = (new DateTimeImmutable("first day of this month", $utc))->setTime(0, 0);
+    $nextMonthStart = $currentMonthStart->modify("+1 month");
+    $previousMonthStart = $currentMonthStart->modify("-1 month");
+    $comparisonStmt = $pdo->prepare("
+        SELECT
+            COALESCE(SUM(CASE
+                WHEN created_at >= :current_start AND created_at < :current_end
+                THEN final_amount ELSE 0 END), 0) AS current_revenue,
+            COALESCE(SUM(CASE
+                WHEN created_at >= :previous_start AND created_at < :previous_end
+                THEN final_amount ELSE 0 END), 0) AS previous_revenue
+        FROM orders
+        WHERE payment_status = 'paid'
+          AND order_status <> 'cancelled'
+    ");
+    $comparisonStmt->execute([
+        "current_start" => $currentMonthStart->format("Y-m-d H:i:s"),
+        "current_end" => $nextMonthStart->format("Y-m-d H:i:s"),
+        "previous_start" => $previousMonthStart->format("Y-m-d H:i:s"),
+        "previous_end" => $currentMonthStart->format("Y-m-d H:i:s")
+    ]);
+    $revenueComparison = $comparisonStmt->fetch(PDO::FETCH_ASSOC);
+    $currentMonthRevenue = (float) $revenueComparison["current_revenue"];
+    $previousMonthRevenue = (float) $revenueComparison["previous_revenue"];
+    $revenueChangePercent = $previousMonthRevenue > 0
+        ? (($currentMonthRevenue - $previousMonthRevenue) / $previousMonthRevenue) * 100
+        : null;
+
+    $startMonth = $currentMonthStart->modify("-5 months");
     $monthlyStmt = $pdo->prepare("
         SELECT DATE_FORMAT(created_at, '%Y-%m') AS month_key,
                COALESCE(SUM(final_amount), 0) AS revenue
@@ -55,10 +139,14 @@ function adminDashboardData(PDO $pdo, int $lowStockThreshold): array
         WHERE payment_status = 'paid'
           AND order_status <> 'cancelled'
           AND created_at >= :start_date
+          AND created_at < :end_date
         GROUP BY DATE_FORMAT(created_at, '%Y-%m')
         ORDER BY month_key
     ");
-    $monthlyStmt->execute(["start_date" => $startMonth->format("Y-m-d 00:00:00")]);
+    $monthlyStmt->execute([
+        "start_date" => $startMonth->format("Y-m-d H:i:s"),
+        "end_date" => $nextMonthStart->format("Y-m-d H:i:s")
+    ]);
     $monthlyResults = [];
     foreach ($monthlyStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $monthlyResults[$row["month_key"]] = (float) $row["revenue"];
@@ -115,6 +203,13 @@ function adminDashboardData(PDO $pdo, int $lowStockThreshold): array
     return [
         "stats" => $stats,
         "months" => $months,
+        "revenue_comparison" => [
+            "current_month_label" => $currentMonthStart->format("F Y"),
+            "previous_month_label" => $previousMonthStart->format("F Y"),
+            "current_month_revenue" => $currentMonthRevenue,
+            "previous_month_revenue" => $previousMonthRevenue,
+            "change_percent" => $revenueChangePercent
+        ],
         "recent_orders" => $recentOrders,
         "top_products" => $topProducts,
         "latest_customers" => $latestCustomers,
@@ -139,6 +234,9 @@ function adminSectionData(
             $pdo,
             (int) adminStoreSettings($pdo)["low_stock_threshold"]
         );
+        if ($search !== "") {
+            $data["dashboard"]["search_results"] = adminDashboardSearchData($pdo, $search);
+        }
     } elseif ($section === "products") {
         $where = ["1 = 1"];
         $params = [];
@@ -381,6 +479,7 @@ function adminSectionData(
         );
     } elseif ($section === "settings") {
         $data["settings"] = adminStoreSettings($pdo);
+        require_once __DIR__ . "/../../config/mailer.php";
         $mailKeys = [
             "APP_BASE_URL",
             "SMTP_HOST",
@@ -393,8 +492,15 @@ function adminSectionData(
         ];
         $missingMailSettings = [];
         foreach ($mailKeys as $key) {
-            $value = getenv($key);
-            if ($value === false || trim((string) $value) === "") {
+            if ($key === "APP_BASE_URL") {
+                $baseUrl = rtrim((string) getAppMailSetting($key), "/");
+                if (
+                    filter_var($baseUrl, FILTER_VALIDATE_URL) === false ||
+                    !in_array(parse_url($baseUrl, PHP_URL_SCHEME), ["http", "https"], true)
+                ) {
+                    $missingMailSettings[] = $key;
+                }
+            } elseif (!isAppMailSettingConfigured($key)) {
                 $missingMailSettings[] = $key;
             }
         }

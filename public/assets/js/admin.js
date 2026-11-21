@@ -3,6 +3,7 @@
     const scrim = document.querySelector(".sidebar-scrim");
     const openButton = document.querySelector("[data-sidebar-open]");
     const closeButton = document.querySelector("[data-sidebar-close]");
+    const profileMenu = document.querySelector("[data-profile-menu]");
 
     const setSidebarOpen = (isOpen) => {
         if (!sidebar || !scrim) return;
@@ -18,7 +19,16 @@
     });
 
     document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") setSidebarOpen(false);
+        if (event.key === "Escape") {
+            setSidebarOpen(false);
+            profileMenu?.removeAttribute("open");
+        }
+    });
+
+    document.addEventListener("click", (event) => {
+        if (profileMenu && !profileMenu.contains(event.target)) {
+            profileMenu.removeAttribute("open");
+        }
     });
 
     document.querySelectorAll("form[data-confirm]").forEach((form) => {

@@ -1,6 +1,7 @@
 
 <?php
-session_start();
+require_once __DIR__ . '/../config/session.php';
+startAppSession();
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/coupons.php';
@@ -310,7 +311,7 @@ function getProductImageUrl($image) {
 
     <title>VELOURA | Discover Your Natural Glow</title>
 
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=2">
     <link rel="stylesheet" href="assets/css/offers.css">
 </head>
 
@@ -322,23 +323,7 @@ function getProductImageUrl($image) {
     </div>
 
     <!-- Header -->
-    <header class="header">
-
-        <a href="index.php" class="logo">
-            VELOURA<span>.</span>
-        </a>
-
-        <nav class="navbar">
-            <a href="#home">Home</a>
-            <a href="products.php">Shop</a>
-            <a href="offers.php">Offers</a>
-            <a href="#about">About</a>
-            <a href="#contact">Contact</a>
-        </nav>
-
-        <?php require __DIR__ . '/partials/header-actions.php'; ?>
-
-    </header>
+    <?php require __DIR__ . '/partials/store-header.php'; ?>
 
     <main>
 

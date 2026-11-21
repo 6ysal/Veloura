@@ -1,12 +1,15 @@
 
 <?php
-session_start();
+require_once __DIR__ . '/../config/session.php';
+startAppSession();
 
 require_once __DIR__ . '/../config/database.php';
 
 $categoryId = filter_input(INPUT_GET, "category", FILTER_VALIDATE_INT);
-$search = trim($_GET["search"] ?? "");
-$sort = $_GET["sort"] ?? "newest";
+$searchInput = $_GET["search"] ?? "";
+$search = is_string($searchInput) ? trim(substr($searchInput, 0, 120)) : "";
+$sortInput = $_GET["sort"] ?? "newest";
+$sort = is_string($sortInput) ? $sortInput : "newest";
 
 $sql = "SELECT p.*, c.name AS category_name
         FROM products p
@@ -62,7 +65,7 @@ $categories = $categoryStmt->fetchAll();
 
     <title>Shop All Products | VELOURA</title>
 
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=2">
 
     <style>
         .shop-page {
@@ -290,20 +293,7 @@ $categories = $categoryStmt->fetchAll();
 
 <body>
 
-<header class="header">
-    <div class="logo">
-        VELO<span>URA</span>
-    </div>
-
-    <nav class="navbar">
-        <a href="index.php">Home</a>
-        <a href="products.php">Shop</a>
-        <a href="index.php#about">About</a>
-        <a href="index.php#contact">Contact</a>
-    </nav>
-
-    <?php require __DIR__ . '/partials/header-actions.php'; ?>
-</header>
+<?php require __DIR__ . '/partials/store-header.php'; ?>
 
 <main class="shop-page">
 
@@ -339,6 +329,7 @@ $categories = $categoryStmt->fetchAll();
             <input
                 type="search"
                 name="search"
+                maxlength="120"
                 placeholder="Search products..."
                 value="<?= htmlspecialchars($search) ?>"
             >

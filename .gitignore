@@ -6,3 +6,4 @@
 /vendor/
 
 /config/database.php
+/config/mailer.local.php

@@ -1,12 +1,8 @@
 <?php
-require_once __DIR__ . '/../../app/coupons.php';
-
 $headerIsLoggedIn = isset($_SESSION["user_id"]);
-$headerIsAdmin = $headerIsLoggedIn
-    && is_string($_SESSION["user_role"] ?? null)
-    && $_SESSION["user_role"] === "admin";
+$headerIsAdmin = false;
 
-if ($headerIsAdmin) {
+if ($headerIsLoggedIn) {
     $headerRoleStmt = $pdo->prepare("
         SELECT role, status
         FROM users
@@ -25,11 +21,6 @@ if ($headerIsAdmin) {
         $headerIsAdmin = false;
     }
 }
-
-$headerUserId = $headerIsLoggedIn ? (int) $_SESSION["user_id"] : null;
-$headerAvailableCoupons = $availableCoupons
-    ?? getAvailableCoupons($pdo, $headerUserId);
-$newCouponCount = newCouponNotificationCount($headerAvailableCoupons, $headerUserId);
 
 if (!isset($cartCount)) {
     $cartCount = 0;
@@ -50,63 +41,40 @@ if (!isset($cartCount)) {
 ?>
 
 <nav class="header-actions" aria-label="Account and shopping">
-    <a
-        href="<?= $headerIsLoggedIn ? 'profile.php' : '../app/auth/login.php' ?>"
-        class="header-action-link"
-    >
-        <svg class="header-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <circle cx="12" cy="8" r="3.5"></circle>
-            <path d="M5 21c0-3.8 3.1-6 7-6s7 2.2 7 6"></path>
-        </svg>
-        <span>Account</span>
-    </a>
-
-    <?php if ($headerIsAdmin): ?>
-        <a href="admin.php" class="header-action-link">
-            <span>Admin</span>
-        </a>
-    <?php endif; ?>
-
-    <?php if ($headerIsLoggedIn): ?>
-        <a href="../app/auth/logout.php" class="header-action-link">
+    <details class="account-menu">
+        <summary class="header-action-link">
             <svg class="header-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M10 17l5-5-5-5"></path>
-                <path d="M15 12H3"></path>
-                <path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"></path>
+                <circle cx="12" cy="8" r="3.5"></circle>
+                <path d="M5 21c0-3.8 3.1-6 7-6s7 2.2 7 6"></path>
             </svg>
-            <span>Logout</span>
-        </a>
-    <?php else: ?>
-        <a href="../app/auth/register.php" class="header-action-link">
-            <svg class="header-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <circle cx="9" cy="8" r="3.5"></circle>
-                <path d="M2 21c0-3.8 3.1-6 7-6"></path>
-                <path d="M18 8v8M14 12h8"></path>
-            </svg>
-            <span>Sign up</span>
-        </a>
-    <?php endif; ?>
-
-    <a
-        href="offers.php"
-        class="header-action-link"
-        aria-label="<?= $newCouponCount > 0
-            ? 'Offers, ' . $newCouponCount . ' new'
-            : 'Offers' ?>"
-    >
-        <span class="header-action-cart-icon">
-            <svg class="header-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M20 13 11 22 2 13V4h9z"></path>
-                <circle cx="7.5" cy="8.5" r="1"></circle>
-            </svg>
-            <?php if ($newCouponCount > 0): ?>
-                <span class="header-action-badge"><?= $newCouponCount > 99 ? "99+" : $newCouponCount ?></span>
+            <span>Account</span>
+        </summary>
+        <div class="account-dropdown">
+            <?php if ($headerIsLoggedIn): ?>
+                <a href="<?= htmlspecialchars($headerPublicPrefix, ENT_QUOTES, 'UTF-8') ?>profile.php">My Account</a>
+                <?php if ($headerIsAdmin): ?>
+                    <a href="<?= htmlspecialchars($headerPublicPrefix, ENT_QUOTES, 'UTF-8') ?>admin.php">Admin dashboard</a>
+                <?php endif; ?>
+                <form class="header-action-form" method="POST" action="<?= htmlspecialchars($headerAuthPrefix, ENT_QUOTES, 'UTF-8') ?>logout.php">
+                    <input
+                        type="hidden"
+                        name="csrf_token"
+                        value="<?= htmlspecialchars($_SESSION["csrf_token"], ENT_QUOTES, 'UTF-8') ?>"
+                    >
+                    <button type="submit">Logout</button>
+                </form>
+            <?php else: ?>
+                <a href="<?= htmlspecialchars($headerAuthPrefix, ENT_QUOTES, 'UTF-8') ?>login.php">Sign in</a>
+                <a href="<?= htmlspecialchars($headerAuthPrefix, ENT_QUOTES, 'UTF-8') ?>register.php">Create account</a>
             <?php endif; ?>
-        </span>
-        <span>Offers</span>
-    </a>
+        </div>
+    </details>
 
-    <a href="cart.php" class="header-action-link">
+    <a
+        href="<?= htmlspecialchars($headerPublicPrefix, ENT_QUOTES, 'UTF-8') ?>cart.php"
+        class="header-action-link"
+        aria-label="Cart, <?= (int) $cartCount ?> items"
+    >
         <span class="header-action-cart-icon">
             <svg class="header-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M3 4h2l2.2 11.2a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 2-1.6L21 8H6"></path>
