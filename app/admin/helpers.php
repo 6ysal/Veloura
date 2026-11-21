@@ -153,7 +153,7 @@ function adminParseDateTime(?string $value, string $label): ?string
     $date = DateTimeImmutable::createFromFormat(
         '!Y-m-d\TH:i',
         $value,
-        new DateTimeZone("UTC")
+        new DateTimeZone("Africa/Cairo")
     );
     $errors = DateTimeImmutable::getLastErrors();
     if (
@@ -163,7 +163,29 @@ function adminParseDateTime(?string $value, string $label): ?string
         throw new DomainException("Enter a valid " . $label . ".");
     }
 
-    return $date->format("Y-m-d H:i:s");
+    return $date
+        ->setTimezone(new DateTimeZone("UTC"))
+        ->format("Y-m-d H:i:s");
+}
+
+function adminFormatDateTimeInput(?string $value): string
+{
+    if ($value === null || trim($value) === "") {
+        return "";
+    }
+
+    $date = DateTimeImmutable::createFromFormat(
+        "!Y-m-d H:i:s",
+        $value,
+        new DateTimeZone("UTC")
+    );
+    if (!$date) {
+        return "";
+    }
+
+    return $date
+        ->setTimezone(new DateTimeZone("Africa/Cairo"))
+        ->format("Y-m-d\\TH:i");
 }
 
 function adminStoreProductImage(array $upload): ?array
