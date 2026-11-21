@@ -160,7 +160,7 @@ function adminPagination(array $list, string $section, string $search, array $fi
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
     <title><?= adminEscape($title) ?> | VELOURA Admin</title>
-    <link rel="stylesheet" href="assets/css/admin.css?v=2">
+    <link rel="stylesheet" href="assets/css/admin.css?v=3">
     <script src="assets/js/admin.js?v=2" defer></script>
 </head>
 <body class="admin-body">

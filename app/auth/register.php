@@ -16,7 +16,6 @@ if (empty($_SESSION["csrf_token"])) {
 }
 
 $message = "";
-$success = false;
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $nameInput = $_POST["name"] ?? "";
@@ -59,14 +58,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $message = "This email is already registered.";
         } else {
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-            $token = bin2hex(random_bytes(32));
 
             try {
                 $pdo->beginTransaction();
 
                 $insertUser = $pdo->prepare("
                     INSERT INTO users (full_name, email, password_hash, email_verified_at)
-                    VALUES (:full_name, :email, :password_hash, NULL)
+                    VALUES (:full_name, :email, :password_hash, UTC_TIMESTAMP())
                 ");
                 $insertUser->execute([
                     "full_name" => $name,
@@ -74,37 +72,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     "password_hash" => $passwordHash
                 ]);
                 $userId = (int) $pdo->lastInsertId();
-
-                $tokenStmt = $pdo->prepare("
-                    INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
-                    VALUES (:user_id, :token_hash, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 24 HOUR))
-                ");
-                $tokenStmt->execute([
-                    "user_id" => $userId,
-                    "token_hash" => hash("sha256", $token)
-                ]);
-
                 $pdo->commit();
-                $success = true;
 
-                try {
-                    require_once __DIR__ . '/../../config/mailer.php';
-                    $verifyUrl = getAppBaseUrl()
-                        . "/app/auth/verify.php?token="
-                        . rawurlencode($token);
-                    $safeUrl = htmlspecialchars($verifyUrl, ENT_QUOTES, 'UTF-8');
+                session_regenerate_id(true);
+                $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
+                $_SESSION["user_id"] = $userId;
+                $_SESSION["user_name"] = $name;
+                $_SESSION["user_email"] = $email;
+                $_SESSION["user_role"] = "customer";
 
-                    sendAppEmail(
-                        $email,
-                        "Verify your VELOURA account",
-                        "<p>Welcome to VELOURA.</p><p><a href=\"{$safeUrl}\">Verify your email address</a></p><p>This link expires in 24 hours.</p>",
-                        "Welcome to VELOURA. Verify your email address: {$verifyUrl}\nThis link expires in 24 hours."
-                    );
-                    $message = "Account created. Check your email for the verification link.";
-                } catch (RuntimeException $e) {
-                    error_log("Verification email could not be sent: " . $e->getMessage());
-                    $message = "Account created, but the verification email could not be sent. Configure SMTP or request another link.";
-                }
+                header("Location: ../../public/index.php");
+                exit;
             } catch (PDOException $e) {
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
@@ -176,8 +154,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     </div>
                 <?php endif; ?>
 
-                <?php if (!$success): ?>
-
                     <form method="POST" action="" class="auth-form">
 
                         <input
@@ -245,15 +221,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         Already have an account?
                         <a href="login.php">Sign In</a>
                     </p>
-
-                <?php else: ?>
-
-                    <p class="auth-switch">
-                        <a href="resend-verification.php">Resend verification email</a>
-                        <a href="login.php">Go to Login</a>
-                    </p>
-
-                <?php endif; ?>
 
                 <p class="auth-footer">
                     © 2026 VELOURA. All rights reserved.
